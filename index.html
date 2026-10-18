@@ -20,7 +20,10 @@
       display:flex;align-items:center;justify-content:center;padding:2rem;
     }
     .stage{
-      width:100%;max-width:1100px;background:linear-gradient(180deg, rgba(255,255,255,0.6), rgba(255,255,255,0.35));border-radius:18px;padding:24px;box-shadow:0 10px 30px rgba(0,0,0,0.12);position:relative;overflow:hidden;
+      width:100%;max-width:1100px;
+      background:linear-gradient(180deg, rgba(255,255,255,0.6), rgba(255,255,255,0.35));
+      border-radius:18px;padding:24px;box-shadow:0 10px 30px rgba(0,0,0,0.12);
+      position:relative;overflow:hidden;
     }
     header{display:flex;gap:16px;align-items:center}
     h1{margin:0;font-size:2.0rem;letter-spacing:0.6px}
@@ -44,16 +47,24 @@
 
     /* slideshow */
     .slideshow{display:flex;gap:12px;align-items:center;margin-top:12px}
-    .slideshow .frame{flex:1;min-height:180px;background:linear-gradient(180deg, rgba(255,255,255,0.8), rgba(255,255,255,0.6));border-radius:8px;display:flex;align-items:center;justify-content:center;overflow:hidden}
+    .slideshow .frame{flex:1;min-height:180px;background:linear-gradient(180deg, rgba(255,255,255,0.8), rgba(255,255,255,0.6));border-radius:8px;display:flex;align-items:center;justify-content:center;padding:12px;overflow:hidden}
     .frame img{max-width:100%;max-height:100%;object-fit:contain}
 
     /* confetti canvas */
-    #confetti{position:absolute;inset:0;pointer-events:none}
+    #confetti{position:absolute;inset:0;pointer-events:none;z-index:20}
 
     footer{display:flex;justify-content:space-between;align-items:center;margin-top:14px;color:#6b5967;font-size:0.95rem}
 
     /* small screens */
     @media (max-width:720px){h1{font-size:1.6rem}.controls{flex-direction:column}.balloon{width:56px;height:74px}}
+
+    /* transient banner */
+    .banner{
+      position:fixed;left:50%;top:20%;transform:translateX(-50%);z-index:60;
+      background:rgba(255,255,255,0.95);color:var(--text);padding:18px 28px;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,0.18);
+      font-size:2rem;font-weight:700;letter-spacing:1px;text-align:center;pointer-events:none;
+    }
+    .banner.dark{background:rgba(0,0,0,0.75);color:white}
   </style>
 </head>
 <body>
@@ -196,15 +207,6 @@
     let playTimeouts = [];
     function ensureAudio(){ if(!audioCtx) audioCtx = new AudioContext(); }
 
-    // notes for "Happy Birthday" (frequencies)
-    const notes = [
-      [392,392,440,392,523,494], // "Happy birthday to you"
-      [392,392,440,392,587,523],
-      [392,392,784,659,523,494,440],
-      [698,698,659,523,587,523]
-    ];
-    const durations = [0.45,0.45,0.9,0.9];
-
     function playTone(freq, start, dur){
       const o = audioCtx.createOscillator();
       const g = audioCtx.createGain();
@@ -217,26 +219,43 @@
       o.stop(start + dur + 0.02);
     }
 
+    function showBanner(text, opts = {}){
+      const b = document.createElement('div'); b.className='banner';
+      if(opts.dark) b.classList.add('dark');
+      b.textContent = text;
+      document.body.appendChild(b);
+      b.animate([{opacity:0, transform:'translateY(-6px)'},{opacity:1, transform:'none'}],{duration:260,fill:'forwards'});
+      setTimeout(()=>{ try{ b.animate([{opacity:1},{opacity:0}],{duration:300,fill:'forwards'}).onfinish = ()=>b.remove(); }catch(e){ b.remove(); } }, opts.duration || 4200);
+    }
+
+    function speakText(text){
+      try{
+        if('speechSynthesis' in window){
+          const u = new SpeechSynthesisUtterance(text);
+          u.lang = 'en-US';
+          window.speechSynthesis.cancel();
+          window.speechSynthesis.speak(u);
+        }
+      }catch(e){}
+    }
+
     function playHappyBirthday(){
-      ensureAudio();
+      try{
+        ensureAudio();
+      }catch(e){ /* ignore */ }
+      if(!audioCtx){ try{ ensureAudio(); }catch(e){} }
+      if(!audioCtx) return;
       const now = audioCtx.currentTime + 0.05;
       let t = now;
-      const noteDur = 0.36;
-      // play arrays sequentially
       const flat = [
-        // first phrase
         392,392,440,392,523,494,
         392,392,440,392,587,523,
         392,392,784,659,523,494,440,
         698,698,659,523,587,523
       ];
-      const lengths = [0.45,0.45,0.9,0.9];
-      // schedule with slight spacing
-      let idx=0;
-      const timings = [0.45,0.45,0.9,0.9];
-      // We'll approximate: play each number with 0.36s and add breaks at phrase boundaries
+      // schedule tones
       let i=0; let phraseBoundaries=[6,12,19,25];
-      let nextBoundaryIdx=0; for(let n of flat){
+      for(let n of flat){
         const dur = 0.36;
         playTone(n,t,dur);
         t += dur;
@@ -244,13 +263,16 @@
         if(phraseBoundaries.includes(i)) t += 0.12;
       }
       playing = true;
+      // Launch confetti and banner immediately when the song starts
+      throwConfetti();
+      showBanner('Happy Birthday, Daddy!', {duration: 6000});
+      speakText('Happy Birthday, Daddy!');
+
       // set a timeout to mark not playing
       setTimeout(()=>{playing=false;}, (t-now)*1000 + 100);
     }
 
-    document.getElementById('playSong').addEventListener('click', ()=>{
-      playHappyBirthday();
-    });
+    document.getElementById('playSong').addEventListener('click', ()=>{ playHappyBirthday(); });
 
     // Space toggles play
     window.addEventListener('keydown',(e)=>{ if(e.code==='Space' && !['INPUT','TEXTAREA','BUTTON'].includes(document.activeElement.tagName)){ e.preventDefault(); playHappyBirthday(); } });
@@ -260,7 +282,7 @@
     const sendBtn = document.getElementById('sendCard');
     const messageCard = document.getElementById('messageCard');
     const messageText = document.getElementById('messageText');
-    function showMessage(text){ messageText.textContent = text; messageCard.style.display='block'; messageCard.animate([{opacity:0, transform:'translateY(6px)'},{opacity:1, transform:'none'}],{duration:420,easing:'cubic-bezier(.2,.9,.2,1)'}); }
+    function showMessage(text){ messageText.textContent = text; messageCard.style.display='block'; messageCard.animate([{opacity:0, transform:'translateY(6px)'},{opacity:1, transform:'none'}],{duration:260,fill:'forwards'}); }
     sendBtn.addEventListener('click', ()=>{
       const txt = messageInput.value.trim();
       if(!txt){ messageInput.focus(); return }
@@ -325,7 +347,7 @@
       autoplayHandle = setInterval(()=>{ nextBtn.click(); }, 2500);
       autoplayBtn.textContent='Stop Autoplay';
     });
-    clearBtn.addEventListener('click', ()=>{ images=[]; photosInput.value=''; frame.textContent='No photos yet — upload some!'; if(autoplayHandle){ clearInterval(autoplayHandle); autoplayHandle=null; autoplayBtn.textContent='Start Autoplay'} });
+    clearBtn.addEventListener('click', ()=>{ images=[]; photosInput.value=''; frame.textContent='No photos yet — upload some!'; if(autoplayHandle){ clearInterval(autoplayHandle); autoplayHandle=null; autoplayBtn.textContent='Start Autoplay'; } });
 
     // Count down
     const bdayInput = document.getElementById('bday');
@@ -370,10 +392,6 @@
 
     // initial frame
     showCurrent();
-
-    // make sure canvas covers stage area too when inside container
-    function syncCanvasSize(){ const rect = document.querySelector('.stage').getBoundingClientRect(); confettiCanvas.width = rect.width; confettiCanvas.height = rect.height; confettiCanvas.style.left = rect.left+'px'; confettiCanvas.style.top = rect.top+'px'; }
-    // But we also want full-window confetti; keep simple: full window size handled earlier
 
     // tiny performance note: pause confetti on background tabs
     document.addEventListener('visibilitychange', ()=>{ if(document.hidden) confettiRunning=false; });
